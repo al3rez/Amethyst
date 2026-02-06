@@ -306,7 +306,16 @@ final class ScreenManager<Delegate: ScreenManagerDelegate>: NSObject, Codable {
             return
         }
 
-        guard let layout = currentLayout, let frameAssignmentOps = layout.frameAssignments(windows, on: screen) else {
+        guard let layout = currentLayout else {
+            return
+        }
+
+        // Manual layout should not auto-tile; user positions windows explicitly.
+        if layout is ManualLayout {
+            return
+        }
+
+        guard let frameAssignmentOps = layout.frameAssignments(windows, on: screen) else {
             return
         }
 

@@ -609,6 +609,9 @@ extension WindowManager: MouseStateKeeperDelegate {
                 // Most tiling layouts are vertical splits; show halves only.
                 mode = .halvesVertical
             }
+        } else {
+            // When tiling is off, allow full quadrant snapping.
+            mode = .quadrants
         }
 
         // Show grid-based snap guide
@@ -629,10 +632,14 @@ extension WindowManager: MouseStateKeeperDelegate {
             return
         }
 
-        // In tiling mode, skip manual snap sizing and just reflow immediately.
+        // In tiling mode, skip manual snap sizing unless we're in Manual layout.
         if UserConfiguration.shared.tilingEnabled {
-            markScreen(screen, forReflowWithChange: .unknown)
-            return
+            if let screenManager: ScreenManager<WindowManager<Application>> = focusedScreenManager(),
+               let layout = screenManager.currentLayout,
+               layout is ManualLayout == false {
+                markScreen(screen, forReflowWithChange: .unknown)
+                return
+            }
         }
 
         // Get the screen frame for calculating zone position
