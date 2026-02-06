@@ -1,0 +1,40 @@
+Amethyst - Local Changes (2026-02-06)
+
+Tiling correctness and stability
+- Added shared window adjustment helper with screen clamping and min-size handling.
+- Guarded against zero dimensions in main-pane ratio calculations.
+- Added frame-equality checks before AX setFrame to avoid redundant updates.
+- Added CATransaction no-animations around window frame updates.
+- Refined reflow batching and filtered no-op assignments using current window frames.
+- Coalesced reflow events to prefer structural changes and reduce storms.
+
+Snap guide behavior
+- Snap guides now respect screen padding and window margins with correct top/bottom alignment.
+- In tiling mode, dropping a snapped window triggers reflow instead of manual sizing.
+- Snap guide modes now match layout type:
+  - Manual: quadrants
+  - Row/Wide: horizontal halves (top/bottom)
+  - Most tiling layouts: vertical halves (left/right)
+- Restored rounded corners with Tahoe-like radius and glass effect.
+
+Tahoe-style UI polish
+- Snap guide uses NSVisualEffectView for glass material.
+- Layout HUD uses NSVisualEffectView, rounded corners, and rounded system fonts.
+- Layout HUD now fades in/out with short animations.
+
+Layout performance improvements
+- Precomputed pane geometry and replaced reduce-based loops with indexed loops in paned layouts.
+- Updated layouts: Tall, TallRight, Column, Row, Wide, TwoPane, TwoPaneRight, WidescreenTall.
+
+Build warning fixes and cleanup
+- Inclusive language updates: blocklist/allowlist naming and comments.
+- Updated transformer name in prefs xib and transformer class name.
+- Replaced deprecated graphicsContext usage in preferences controllers.
+- Replaced deprecated unarchive transformer name.
+- Updated status item usage to modern button-based API.
+- Removed stale DerivedData framework search paths in project settings.
+- Fixed cyclomatic complexity warning in LayoutType by using key maps.
+- Updated tests to use indices instead of enumerated when index is unused.
+
+Notes
+- AppIntents metadata warning remains from Xcode tooling (no AppIntents.framework dependency).
