@@ -1,8 +1,14 @@
-# Amethyst
+# Amethyst (Maintained Fork)
 
 [![Discussions](https://img.shields.io/github/discussions/ianyh/Amethyst)](https://github.com/ianyh/Amethyst/discussions)
 [![Open Source Helpers](https://www.codetriage.com/ianyh/amethyst/badges/users.svg)](https://www.codetriage.com/ianyh/amethyst)
 [![Reviewed by Hound](https://img.shields.io/badge/Reviewed_by-Hound-8E64B0.svg)](https://houndci.com)
+
+Maintained fork with significant fixes, performance work, and UI polish.
+
+See:
+- `CHANGELOG.md` for a structured summary of changes.
+- `changelog.txt` for a detailed running log.
 
 Tiling window manager for macOS along the lines of [xmonad](https://xmonad.org/).
 
