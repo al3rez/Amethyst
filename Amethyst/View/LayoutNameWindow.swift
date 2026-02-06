@@ -13,14 +13,13 @@ import QuartzCore
 class LayoutNameWindow: NSWindow {
     @IBOutlet weak var layoutNameField: NSTextField?
     @IBOutlet weak var layoutDescriptionLabel: NSTextField?
+    private var effectView: NSVisualEffectView?
 
     @IBOutlet override var contentView: NSView? {
         didSet {
             contentView?.wantsLayer = true
             contentView?.layer?.frame = NSRectToCGRect(contentView!.frame)
-            contentView?.layer?.cornerRadius = 20.0
-            contentView?.layer?.masksToBounds = true
-            contentView?.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.75).cgColor
+            contentView?.layer?.backgroundColor = NSColor.clear.cgColor
         }
     }
     @IBOutlet var containerView: NSView?
@@ -32,6 +31,64 @@ class LayoutNameWindow: NSWindow {
         ignoresMouseEvents = true
         backgroundColor = NSColor.clear
         level = .floating
+
+        setUpVisualEffect()
+        applyTahoeTypography()
+    }
+
+    func animateIn() {
+        alphaValue = 0
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.15
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            animator().alphaValue = 1
+        }
+    }
+
+    func animateOut(completion: @escaping () -> Void) {
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0.15
+            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            animator().alphaValue = 0
+        }, completionHandler: completion)
+    }
+
+    private func setUpVisualEffect() {
+        guard let contentView = contentView else { return }
+
+        effectView?.removeFromSuperview()
+
+        let visualEffect = NSVisualEffectView(frame: contentView.bounds)
+        visualEffect.autoresizingMask = [.width, .height]
+        visualEffect.material = .hudWindow
+        visualEffect.blendingMode = .withinWindow
+        visualEffect.state = .active
+        visualEffect.wantsLayer = true
+        visualEffect.layer?.cornerRadius = 22
+        visualEffect.layer?.masksToBounds = true
+
+        contentView.addSubview(visualEffect, positioned: .below, relativeTo: containerView)
+        effectView = visualEffect
+    }
+
+    private func applyTahoeTypography() {
+        if let nameField = layoutNameField {
+            nameField.textColor = NSColor.labelColor
+            nameField.font = roundedSystemFont(ofSize: 20, weight: .semibold)
+        }
+
+        if let descriptionField = layoutDescriptionLabel {
+            descriptionField.textColor = NSColor.secondaryLabelColor
+            descriptionField.font = roundedSystemFont(ofSize: 12, weight: .regular)
+        }
+    }
+
+    private func roundedSystemFont(ofSize size: CGFloat, weight: NSFont.Weight) -> NSFont {
+        let baseFont = NSFont.systemFont(ofSize: size, weight: weight)
+        if let descriptor = baseFont.fontDescriptor.withDesign(.rounded) {
+            return NSFont(descriptor: descriptor, size: size) ?? baseFont
+        }
+        return baseFont
     }
 
     // Display custom notification with dynamic sizing
@@ -75,5 +132,6 @@ class LayoutNameWindow: NSWindow {
 
         // Update content view layer frame
         contentView?.layer?.frame = NSRectToCGRect(contentView!.frame)
+        effectView?.frame = contentView!.bounds
     }
 }

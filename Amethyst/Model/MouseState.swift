@@ -29,6 +29,9 @@ protocol MouseStateKeeperDelegate: AnyObject {
     associatedtype Window: WindowType
     func recommendMainPaneRatio(_ ratio: CGFloat)
     func swapDraggedWindowWithDropzone(_ draggedWindow: Window)
+    func updateSnapGuide(forDraggedWindow window: Window, at location: CGPoint)
+    func hideSnapGuide()
+    func dropWindowToSnapZone(_ draggedWindow: Window)
 }
 
 /**
@@ -71,13 +74,24 @@ class MouseStateKeeper<Delegate: MouseStateKeeperDelegate> {
             self.state = .clicking
         case .leftMouseDragged:
             switch self.state {
-            case .moving, .resizing:
-            break // ignore - we have what we need
+            case let .moving(window):
+                // Update snap guide while dragging a window
+                let location = NSPointToCGPoint(anEvent.locationInWindow)
+                log.debug("MouseStateKeeper: calling updateSnapGuide for moving window")
+                delegate?.updateSnapGuide(forDraggedWindow: window, at: location)
+            case .resizing:
+                break // ignore - we have what we need
             case .pointing, .clicking, .dragging, .doneDragging:
                 self.state = .dragging
             }
 
         case .leftMouseUp:
+            // Drop window to snap zone if enabled, then hide guide
+            if case let .moving(draggedWindow) = self.state {
+                delegate?.dropWindowToSnapZone(draggedWindow)
+            }
+            delegate?.hideSnapGuide()
+
             switch self.state {
             case .dragging:
                 // assume window move event will come shortly after

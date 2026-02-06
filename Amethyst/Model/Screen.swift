@@ -43,6 +43,9 @@ protocol ScreenType: Equatable {
     /// The frame without adjustment.
     func frame() -> CGRect
 
+    /// The frame used for snap guides (ignores window margins and screen padding settings).
+    func snapGuideFrame() -> CGRect
+
     /// The opaque idenfitifer for the screen in the underlying graphics system.
     func screenID() -> String?
 
@@ -77,6 +80,19 @@ struct AMScreen: ScreenType {
     func adjustedFrame(disableWindowMargins: Bool) -> CGRect {
         var frame = UserConfiguration.shared.ignoreMenuBar() ? frameIncludingDockAndMenu() : frameWithoutDockOrMenu()
 
+        // Handle notch on MacBook Pro models (macOS 12+)
+        // safeAreaInsets accounts for the notch area that windows should avoid
+        if #available(macOS 12.0, *) {
+            let safeAreaInsets = screen.safeAreaInsets
+            // Only apply if there's actually a notch (top inset > 0 and more than menu bar)
+            // The safe area already excludes the menu bar, so we check if ignoreMenuBar is set
+            if safeAreaInsets.top > 0 && UserConfiguration.shared.ignoreMenuBar() {
+                // When ignoring menu bar, we still need to account for the notch
+                frame.origin.y += safeAreaInsets.top
+                frame.size.height -= safeAreaInsets.top
+            }
+        }
+
         if UserConfiguration.shared.windowMargins() && !disableWindowMargins {
             /* Inset for producing half of the full padding around screen as collapse only adds half of it to all windows */
             let padding = floor(UserConfiguration.shared.windowMarginSize() / 2)
@@ -100,11 +116,13 @@ struct AMScreen: ScreenType {
             frame.size.height = windowMinimumHeight
         }
 
-         let isDisablePaddingOnBuiltinDisplay: Bool =
-             UserConfiguration.shared.disablePaddingOnBuiltinDisplay()
-         let isScreenBuiltin: boolean_t =
-             CGDisplayIsBuiltin(screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as! CGDirectDisplayID)
-         if isDisablePaddingOnBuiltinDisplay && isScreenBuiltin == 1 {return frame}
+        let isDisablePaddingOnBuiltinDisplay: Bool =
+            UserConfiguration.shared.disablePaddingOnBuiltinDisplay()
+        if isDisablePaddingOnBuiltinDisplay,
+           let screenNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID {
+            let isScreenBuiltin = CGDisplayIsBuiltin(screenNumber)
+            if isScreenBuiltin == 1 { return frame }
+        }
 
         let paddingTop = UserConfiguration.shared.screenPaddingTop()
         let paddingBottom = UserConfiguration.shared.screenPaddingBottom()
@@ -116,6 +134,21 @@ struct AMScreen: ScreenType {
         frame.size.width -= (paddingRight + paddingLeft)
         // subtract the bottom padding, and also any amount that we pushed the frame down with the top padding
         frame.size.height -= (paddingBottom + paddingTop)
+
+        return frame
+    }
+
+    func snapGuideFrame() -> CGRect {
+        var frame = UserConfiguration.shared.ignoreMenuBar() ? frameIncludingDockAndMenu() : frameWithoutDockOrMenu()
+
+        // Handle notch on MacBook Pro models (macOS 12+)
+        if #available(macOS 12.0, *) {
+            let safeAreaInsets = screen.safeAreaInsets
+            if safeAreaInsets.top > 0 && UserConfiguration.shared.ignoreMenuBar() {
+                frame.origin.y += safeAreaInsets.top
+                frame.size.height -= safeAreaInsets.top
+            }
+        }
 
         return frame
     }
@@ -133,6 +166,9 @@ struct AMScreen: ScreenType {
     }
 
     func screenID() -> String? {
+        guard CGSPrivateAPIAvailability.isAvailable else {
+            return nil
+        }
         guard let managedDisplay = CGSCopyBestManagedDisplayForRect(CGSMainConnectionID(), frameIncludingDockAndMenu()) else {
             return nil
         }
@@ -148,6 +184,9 @@ struct AMScreen: ScreenType {
     }
 
     static func screenDescriptions() -> [JSON]? {
+        guard CGSPrivateAPIAvailability.isAvailable else {
+            return nil
+        }
         guard let cfScreenDescriptions = CGSCopyManagedDisplaySpaces(CGSMainConnectionID())?.takeRetainedValue() else {
             return nil
         }

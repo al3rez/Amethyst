@@ -7,7 +7,6 @@
 //
 
 import AppKit
-import Carbon
 import Foundation
 import RxSwift
 import Silica
@@ -54,7 +53,6 @@ final class WindowManager<Application: ApplicationType>: NSObject, Codable {
     private var lastFocusDate: Date?
 
     private lazy var mouseStateKeeper = MouseStateKeeper(delegate: self)
-    private lazy var applicationEventHandler = ApplicationEventHandler(delegate: self)
     private let userConfiguration: UserConfiguration
     private let disposeBag = DisposeBag()
 
@@ -84,6 +82,8 @@ final class WindowManager<Application: ApplicationType>: NSObject, Codable {
         addWorkspaceNotificationObserver(NSWorkspace.didHideApplicationNotification, selector: #selector(applicationDidHide(_:)))
         addWorkspaceNotificationObserver(NSWorkspace.didUnhideApplicationNotification, selector: #selector(applicationDidUnhide(_:)))
         addWorkspaceNotificationObserver(NSWorkspace.activeSpaceDidChangeNotification, selector: #selector(activeSpaceDidChange(_:)))
+        addWorkspaceNotificationObserver(NSWorkspace.didLaunchApplicationNotification, selector: #selector(applicationDidLaunch(_:)))
+        addWorkspaceNotificationObserver(NSWorkspace.didTerminateApplicationNotification, selector: #selector(applicationDidTerminate(_:)))
 
         NotificationCenter.default.addObserver(
             self,
@@ -91,8 +91,6 @@ final class WindowManager<Application: ApplicationType>: NSObject, Codable {
             name: NSApplication.didChangeScreenParametersNotification,
             object: nil
         )
-
-        installApplicationMonitor()
 
         reevaluateWindows()
         screens.updateScreens(windowManager: self)
@@ -184,45 +182,18 @@ final class WindowManager<Application: ApplicationType>: NSObject, Codable {
         }
 
         screens.updateSpaces()
+        windows.invalidateSpaceCache()  // Invalidate cached window-to-space mappings
         windows.regenerateActiveIDCache()
+        // Clean up any windows that became invalid during space change
+        let cleaned = windows.cleanupInvalidWindows()
+        if cleaned > 0 {
+            log.info("Cleaned up \(cleaned) invalid window(s) after space change")
+        }
         markAllScreensForReflow(withChange: .spaceChange)
     }
 
     @objc func screenParametersDidChange(_ notification: Notification) {
         screens.updateScreens(windowManager: self)
-    }
-}
-
-extension WindowManager: ApplicationEventHandlerDelegate {
-    private func installApplicationMonitor() {
-        let target = GetApplicationEventTarget()
-        let launchedEventSpec = EventTypeSpec(eventClass: OSType(kEventClassApplication), eventKind: OSType(kEventAppLaunched))
-        let terminatedEventSpec = EventTypeSpec(eventClass: OSType(kEventClassApplication), eventKind: OSType(kEventAppTerminated))
-        var eventSpecs = [launchedEventSpec, terminatedEventSpec]
-        let eventHandler = UnsafeMutableRawPointer(Unmanaged.passUnretained(applicationEventHandler).toOpaque())
-        let error = InstallEventHandler(target, applicationEventHandlerUPP, 2, &eventSpecs, eventHandler, nil)
-
-        if error != noErr {
-            log.error("error installing app launch monitor: \(error)")
-        }
-    }
-
-    func add(applicationWithPID pid: pid_t) {
-        guard let runningApplication = NSRunningApplication(processIdentifier: pid) else {
-            log.warning("process launched with no application: \(pid)")
-            return
-        }
-
-        add(runningApplication: runningApplication)
-    }
-
-    func remove(applicationWithPID pid: pid_t) {
-        guard let application = applicationWithPID(pid) else {
-            log.warning("process terminated with no application: \(pid)")
-            return
-        }
-
-        remove(application: application)
     }
 }
 
@@ -394,12 +365,18 @@ extension WindowManager {
     }
 
     private func add(window: Window, retries: Int = 5, delay: TimeInterval = 0.01) {
+        // Validate window before proceeding
+        guard window.isValid() else {
+            log.debug("Skipping add for invalid window (cgID: \(window.cgID()))")
+            return
+        }
+
         guard window.shouldBeManaged() else {
             return
         }
 
         guard let application = applicationWithPID(window.pid()) else {
-            log.error("Tried to add a window without an application")
+            log.error("Tried to add a window without an application (pid: \(window.pid()), title: \(window.title() ?? "<unknown>"))")
             return
         }
 
@@ -413,8 +390,13 @@ extension WindowManager {
 
         switch application.defaultFloatForWindow(window) {
         case .unreliable where retries > 0:
-            return DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                self.add(window: window, retries: retries - 1, delay: delay * 2)
+            return DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                // Re-validate window before retry - it may have been destroyed
+                guard window.isValid() else {
+                    log.debug("Window became invalid during retry delay, skipping add")
+                    return
+                }
+                self?.add(window: window, retries: retries - 1, delay: delay * 2)
             }
         case .reliable(.floating), .unreliable(.floating):
             windows.setFloating(true, forWindow: window)
@@ -423,8 +405,10 @@ extension WindowManager {
         }
 
         windows.add(window: window, atFront: userConfiguration.sendNewWindowsToMainPane())
+        log.debug("Added window: '\(window.title() ?? "<unknown>")' (cgID: \(window.cgID()))")
 
         guard let screen = window.screen() else {
+            log.warning("Added window has no screen: '\(window.title() ?? "<unknown>")'")
             return
         }
         let space = CGWindowsInfo.windowSpace(window)
@@ -565,6 +549,107 @@ extension WindowManager: MouseStateKeeperDelegate {
         }
         executeTransition(.switchWindows(draggedWindow, secondWindow))
     }
+
+    func updateSnapGuide(forDraggedWindow draggedWindow: Window, at location: CGPoint) {
+        guard userConfiguration.enableSnapGuides() else {
+            return
+        }
+
+        guard let screen = draggedWindow.screen() else {
+            SnapGuideOverlay.shared.hide()
+            return
+        }
+
+        // Get the current mouse position in screen coordinates (top-left origin)
+        let flippedPointerLocation = NSPointToCGPoint(NSEvent.mouseLocation)
+        let screenFrame = screen.snapGuideFrame()
+        let globalHeight = Screen.globalHeight()
+        let mouseY = globalHeight - flippedPointerLocation.y
+
+        let mouseLocation = CGPoint(x: flippedPointerLocation.x, y: mouseY)
+
+        // Convert screen frame to top-left origin coordinates
+        var adjustedScreenFrame = CGRect(
+            x: screenFrame.origin.x,
+            y: globalHeight - screenFrame.origin.y - screenFrame.height,
+            width: screenFrame.width,
+            height: screenFrame.height
+        )
+
+        // Apply screen padding + window margins in top-left coordinates so padding
+        // removes space from the top (not bottom).
+        let padding = floor(UserConfiguration.shared.windowMarginSize() / 2)
+        if UserConfiguration.shared.windowMargins() {
+            adjustedScreenFrame.origin.x += padding
+            adjustedScreenFrame.origin.y += padding
+            adjustedScreenFrame.size.width -= 2 * padding
+            adjustedScreenFrame.size.height -= 2 * padding
+        }
+
+        let paddingTop = UserConfiguration.shared.screenPaddingTop()
+        let paddingBottom = UserConfiguration.shared.screenPaddingBottom()
+        let paddingLeft = UserConfiguration.shared.screenPaddingLeft()
+        let paddingRight = UserConfiguration.shared.screenPaddingRight()
+
+        adjustedScreenFrame.origin.x += paddingLeft
+        adjustedScreenFrame.origin.y += paddingTop
+        adjustedScreenFrame.size.width -= (paddingLeft + paddingRight)
+        adjustedScreenFrame.size.height -= (paddingTop + paddingBottom)
+
+        var mode: SnapGuideMode = .quadrants
+        if UserConfiguration.shared.tilingEnabled,
+           let screenManager: ScreenManager<WindowManager<Application>> = focusedScreenManager(),
+           let layout = screenManager.currentLayout {
+            if layout is ManualLayout {
+                mode = .quadrants
+            } else if layout is RowLayout || layout is WideLayout {
+                // Horizontal splits only.
+                mode = .halvesHorizontal
+            } else {
+                // Most tiling layouts are vertical splits; show halves only.
+                mode = .halvesVertical
+            }
+        }
+
+        // Show grid-based snap guide
+        SnapGuideOverlay.shared.showGrid(at: mouseLocation, screenFrame: adjustedScreenFrame, mode: mode)
+    }
+
+    func hideSnapGuide() {
+        SnapGuideOverlay.shared.hide()
+    }
+
+    func dropWindowToSnapZone(_ draggedWindow: Window) {
+        guard userConfiguration.enableSnapGuides() else { return }
+        guard let screen = draggedWindow.screen() else { return }
+        guard let zone = SnapGuideOverlay.shared.currentSnapZone() else {
+            if UserConfiguration.shared.tilingEnabled {
+                markScreen(screen, forReflowWithChange: .unknown)
+            }
+            return
+        }
+
+        // In tiling mode, skip manual snap sizing and just reflow immediately.
+        if UserConfiguration.shared.tilingEnabled {
+            markScreen(screen, forReflowWithChange: .unknown)
+            return
+        }
+
+        // Get the screen frame for calculating zone position
+        let screenFrame = screen.adjustedFrame()
+
+        // Calculate the target frame based on zone
+        let targetFrame = applyWindowAdjustments(
+            to: zone.frame(on: screenFrame),
+            screenFrame: screenFrame,
+            disableWindowMargins: false
+        )
+
+        log.info("Dropping window '\(draggedWindow.title() ?? "<unknown>")' to zone \(zone) at frame \(targetFrame)")
+
+        // Move window to the zone (don't trigger reflow - this is manual positioning)
+        draggedWindow.setFrame(targetFrame, withThreshold: CGSize(width: 1, height: 1))
+    }
 }
 
 // MARK: ApplicationObservationDelegate
@@ -598,21 +683,24 @@ extension WindowManager: ApplicationObservationDelegate {
     }
 
     func application(_ application: AnyApplication<Application>, didMoveWindow window: Window) {
-        guard userConfiguration.mouseSwapsWindows() else {
+        guard let screen = window.screen(), activeWindows(on: screen).contains(window) else {
+            log.debug("didMoveWindow: window not on active screen")
             return
         }
 
-        guard let screen = window.screen(), activeWindows(on: screen).contains(window) else {
-            return
-        }
+        log.debug("didMoveWindow: current state = \(mouseStateKeeper.state), window = '\(window.title() ?? "<unknown>")'")
 
         switch mouseStateKeeper.state {
         case .dragging:
             // be aware of last reflow time, again to prevent race condition
             let reflowEndInterval = Date().timeIntervalSince(lastReflowTime)
-            guard reflowEndInterval > mouseStateKeeper.dragRaceThresholdSeconds else { break }
+            guard reflowEndInterval > mouseStateKeeper.dragRaceThresholdSeconds else {
+                log.debug("didMoveWindow: skipping due to reflow threshold")
+                break
+            }
 
             // record window and wait for mouse up
+            log.info("didMoveWindow: transitioning to .moving state for window '\(window.title() ?? "<unknown>")'")
             mouseStateKeeper.state = .moving(window: window)
         case let .doneDragging(lmbUpMoment):
             mouseStateKeeper.state = .pointing // flip state first to prevent race condition
@@ -621,7 +709,11 @@ extension WindowManager: ApplicationObservationDelegate {
             let dragEndInterval = Date().timeIntervalSince(lmbUpMoment)
             guard dragEndInterval < mouseStateKeeper.dragRaceThresholdSeconds else { break }
 
-            mouseStateKeeper.swapDraggedWindowWithDropzone(window)
+            if userConfiguration.mouseSwapsWindows() {
+                mouseStateKeeper.swapDraggedWindowWithDropzone(window)
+            }
+            // Always trigger reflow to snap windows back to tiled positions
+            markScreen(screen, forReflowWithChange: .unknown)
         default:
             break
         }
@@ -679,7 +771,7 @@ extension WindowManager: ApplicationObservationDelegate {
             selector: #selector(applicationActivated(_:)),
             object: nil
         )
-        perform(#selector(applicationActivated(_:)), with: nil, afterDelay: 0.2)
+        perform(#selector(applicationActivated(_:)), with: nil, afterDelay: 0.05)
     }
 }
 
@@ -839,6 +931,14 @@ extension WindowManager: ScreenManagerDelegate {
     }
 
     func activeWindowSet(forScreenManager screenManager: ScreenManager<WindowManager<Application>>) -> WindowSet<Window> {
-        return windows.windowSet(forActiveWindowsOnScreen: screenManager.screen!)
+        guard let screen = screenManager.screen else {
+            return WindowSet<Window>(
+                windows: [],
+                isWindowWithIDActive: { _ in false },
+                isWindowWithIDFloating: { _ in false },
+                windowForID: { _ in nil }
+            )
+        }
+        return windows.windowSet(forActiveWindowsOnScreen: screen)
     }
 }
