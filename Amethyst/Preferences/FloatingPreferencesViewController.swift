@@ -11,7 +11,7 @@ import Foundation
 
 class FloatingPreferencesViewController: NSViewController, NSTableViewDataSource, NSTableViewDelegate {
     private var floatingBundles: [FloatingBundle] {
-        return arrayController.arrangedObjects as! [FloatingBundle]
+        return (arrayController.arrangedObjects as? [FloatingBundle]) ?? []
     }
 
     @IBOutlet var floatingTableView: NSTableView!
@@ -50,7 +50,7 @@ class FloatingPreferencesViewController: NSViewController, NSTableViewDataSource
             modifierFlags: [],
             timestamp: 0,
             windowNumber: sender.window!.windowNumber,
-            context: sender.window!.graphicsContext,
+            context: NSGraphicsContext.current,
             eventNumber: 0,
             clickCount: 1,
             pressure: 1
@@ -184,7 +184,7 @@ class FloatingPreferencesViewController: NSViewController, NSTableViewDataSource
     }
 }
 
-@objc(FloatingBlacklistIntBooleanTransformer) class FloatingBlacklistIntBooleanTransformer: ValueTransformer {
+@objc(FloatingBlocklistIntBooleanTransformer) class FloatingBlocklistIntBooleanTransformer: ValueTransformer {
     override class func transformedValueClass() -> AnyClass {
         return NSNumber.self
     }

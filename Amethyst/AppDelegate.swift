@@ -76,15 +76,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     override func awakeFromNib() {
         super.awakeFromNib()
 
-        let version = Bundle.main.infoDictionary?["CFBundleVersion"] as! String
-        let shortVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as! String
+        let version = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown"
+        let shortVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
         let statusItemImage = NSImage(named: "icon-statusitem")
         statusItemImage?.isTemplate = true
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem?.image = statusItemImage
+        statusItem?.button?.image = statusItemImage
         statusItem?.menu = statusItemMenu
-        statusItem?.highlightMode = true
+        if let cell = statusItem?.button?.cell as? NSButtonCell {
+            cell.highlightsBy = [.contentsCellMask]
+        }
 
         let hideMenuBarIcon: Bool = UserConfiguration.shared.hideMenuBarIcon()
         statusItem?.isVisible = !hideMenuBarIcon
@@ -192,7 +194,7 @@ extension AppDelegate: UserConfigurationDelegate {
             toggleGlobalTilingMenuItem?.title = "Enable Tiling"
         }
         statusItemImage?.isTemplate = true
-        statusItem?.image = statusItemImage
+        statusItem?.button?.image = statusItemImage
     }
 
     func configurationAccessibilityPermissionsDidChange(_ userConfiguration: UserConfiguration) {

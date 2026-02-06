@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		66748D1B629940307E586E4C /* SnapGuideOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C0A1EB512E960D2F739AD69 /* SnapGuideOverlay.swift */; };
 		1A4B46EB20AA7717003D5110 /* NSTableView+Amethyst.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A4B46EA20AA7717003D5110 /* NSTableView+Amethyst.swift */; };
 		2A6D9A4125E5D24D006A36B5 /* AppManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A6D9A4025E5D24D006A36B5 /* AppManager.swift */; };
 		4000DB10239CA07000365A0C /* WideLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4000DB0F239CA07000365A0C /* WideLayoutTests.swift */; };
@@ -62,6 +63,7 @@
 		4046EFCF2236019400113067 /* Window.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4046EFCE2236019400113067 /* Window.swift */; };
 		4046EFD12238949900113067 /* Application.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4046EFD02238949900113067 /* Application.swift */; };
 		404BE9CE1CFBB6E900D6C537 /* BinarySpacePartitioningLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 404BE9CD1CFBB6E900D6C537 /* BinarySpacePartitioningLayout.swift */; };
+		6DCCFD8DE09A349717968A3E /* ManualLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95DF6FB4AFE53C14E946B79B /* ManualLayout.swift */; };
 		404BE9D11CFBDF1900D6C537 /* BinarySpacePartitioningLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 404BE9D01CFBDF1900D6C537 /* BinarySpacePartitioningLayoutTests.swift */; };
 		40578C19232D9CC0006553A0 /* Screen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40578C18232D9CC0006553A0 /* Screen.swift */; };
 		40578C1B232DC607006553A0 /* TestScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40578C1A232DC607006553A0 /* TestScreen.swift */; };
@@ -157,6 +159,7 @@
 		401ADBAE2D55A1B6001FF53A /* recommended-main-pane-ratio.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "recommended-main-pane-ratio.js"; sourceTree = "<group>"; };
 		401BBCB52333067F005118F8 /* ColumnLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColumnLayoutTests.swift; sourceTree = "<group>"; };
 		401BC8971CE7E45300F89B3F /* WindowManager.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = WindowManager.swift; sourceTree = "<group>"; };
+		1C0A1EB512E960D2F739AD69 /* SnapGuideOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnapGuideOverlay.swift; sourceTree = "<group>"; };
 		401BC8991CE8C6AE00F89B3F /* HotKeyManager.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = HotKeyManager.swift; path = ../Events/HotKeyManager.swift; sourceTree = "<group>"; };
 		401BC89B1CE8D58A00F89B3F /* ShortcutsPreferencesListItemView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ShortcutsPreferencesListItemView.swift; sourceTree = "<group>"; };
 		401BC8A11CE8D86B00F89B3F /* ShortcutsPreferencesViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ShortcutsPreferencesViewController.swift; sourceTree = "<group>"; };
@@ -198,6 +201,7 @@
 		4046EFCE2236019400113067 /* Window.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Window.swift; sourceTree = "<group>"; };
 		4046EFD02238949900113067 /* Application.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Application.swift; sourceTree = "<group>"; };
 		404BE9CD1CFBB6E900D6C537 /* BinarySpacePartitioningLayout.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = BinarySpacePartitioningLayout.swift; sourceTree = "<group>"; };
+		95DF6FB4AFE53C14E946B79B /* ManualLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualLayout.swift; sourceTree = "<group>"; };
 		404BE9D01CFBDF1900D6C537 /* BinarySpacePartitioningLayoutTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = BinarySpacePartitioningLayoutTests.swift; sourceTree = "<group>"; };
 		40578C18232D9CC0006553A0 /* Screen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Screen.swift; sourceTree = "<group>"; };
 		40578C1A232DC607006553A0 /* TestScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestScreen.swift; sourceTree = "<group>"; };
@@ -344,6 +348,7 @@
 				40CEF42F1C2B8D21004C3297 /* ScreenManager.swift */,
 				40637076224F0EFF0081299D /* Screens.swift */,
 				401BC8971CE7E45300F89B3F /* WindowManager.swift */,
+				1C0A1EB512E960D2F739AD69 /* SnapGuideOverlay.swift */,
 				40A7AEA6232ECF3000E79964 /* Windows.swift */,
 				401C35B422482EAF0019ED07 /* WindowTransitionCoordinator.swift */,
 			);
@@ -363,6 +368,7 @@
 			isa = PBXGroup;
 			children = (
 				404BE9CD1CFBB6E900D6C537 /* BinarySpacePartitioningLayout.swift */,
+				95DF6FB4AFE53C14E946B79B /* ManualLayout.swift */,
 				4062AD321C1FA48C00DB612B /* ColumnLayout.swift */,
 				4062AD2A1C1F99EA00DB612B /* FloatingLayout.swift */,
 				4062AD2C1C1F9B8B00DB612B /* FullscreenLayout.swift */,
@@ -812,6 +818,7 @@
 				40A7AEA7232ECF3000E79964 /* Windows.swift in Sources */,
 				F0B42E352A3CA45E00298E30 /* TwoPaneRightLayout.swift in Sources */,
 				404BE9CE1CFBB6E900D6C537 /* BinarySpacePartitioningLayout.swift in Sources */,
+				6DCCFD8DE09A349717968A3E /* ManualLayout.swift in Sources */,
 				4062AD3B1C206EA900DB612B /* WidescreenTallLayout.swift in Sources */,
 				4058C46F1C4B119500B19D26 /* LayoutNameWindowController.swift in Sources */,
 				4062AD311C1FA29600DB612B /* TallRightLayout.swift in Sources */,
@@ -826,6 +833,7 @@
 				401BC8A21CE8D86B00F89B3F /* ShortcutsPreferencesViewController.swift in Sources */,
 				401BC8A81CE8E94000F89B3F /* WindowsInformation.swift in Sources */,
 				401BC8981CE7E45300F89B3F /* WindowManager.swift in Sources */,
+				66748D1B629940307E586E4C /* SnapGuideOverlay.swift in Sources */,
 				400A5E9D2327350C00F0A2C3 /* Space.swift in Sources */,
 				401BC8BA1CE9319500F89B3F /* FocusFollowsMouseManager.swift in Sources */,
 				40C1357C1F202AEE00FF9FA7 /* PreferencesWindow.swift in Sources */,
@@ -1035,7 +1043,6 @@
 				ENABLE_MODULE_VERIFIER = YES;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
-					"$(USER_LIBRARY_DIR)/Developer/Xcode/DerivedData/Amethyst-hayuzxrdmhaqmverzffhmryaexfi/Build/Products/Debug",
 					"$(PROJECT_DIR)",
 					"$(SYSTEM_LIBRARY_DIR)/PrivateFrameworks",
 				);
@@ -1078,7 +1085,6 @@
 				ENABLE_MODULE_VERIFIER = YES;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
-					"$(USER_LIBRARY_DIR)/Developer/Xcode/DerivedData/Amethyst-hayuzxrdmhaqmverzffhmryaexfi/Build/Products/Debug",
 					"$(PROJECT_DIR)",
 					"$(SYSTEM_LIBRARY_DIR)/PrivateFrameworks",
 				);

@@ -48,7 +48,7 @@ class RowLayoutTests: QuickSpec {
 
                 mainAssignment.verify(frames: [CGRect(origin: .zero, size: CGSize(width: 2000, height: 500))])
 
-                let secondaryFrames = secondaryAssignments.enumerated().map { index, _ in
+                let secondaryFrames = secondaryAssignments.indices.map { index in
                     return CGRect(x: 0, y: 500.0 + 166 * CGFloat(index), width: 2000, height: 166)
                 }
 
@@ -85,7 +85,7 @@ class RowLayoutTests: QuickSpec {
 
                 mainAssignment.verify(frames: [CGRect(x: 100, y: 100, width: 2000, height: 500)])
 
-                let secondaryFrames = secondaryAssignments.enumerated().map { index, _ in
+                let secondaryFrames = secondaryAssignments.indices.map { index in
                     return CGRect(x: 100, y: 600.0 + 166 * CGFloat(index), width: 2000, height: 166)
                 }
 

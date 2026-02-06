@@ -76,13 +76,14 @@ enum ConfigurationKey: String {
     case windowMinimumWidth = "window-minimum-width"
     case windowMaxCount = "window-max-count"
     case floatingBundleIdentifiers = "floating"
-    case floatingBundleIdentifiersIsBlacklist = "floating-is-blacklist"
+    case floatingBundleIdentifiersIsBlocklist = "floating-is-blacklist"
     case ignoreMenuBar = "ignore-menu-bar"
     case floatSmallWindows = "float-small-windows"
     case mouseFollowsFocus = "mouse-follows-focus"
     case focusFollowsMouse = "focus-follows-mouse"
     case mouseSwapsWindows = "mouse-swaps-windows"
     case mouseResizesWindows = "mouse-resizes-windows"
+    case enableSnapGuides = "enable-snap-guides"
     case layoutHUD = "enables-layout-hud"
     case layoutHUDOnSpaceChange = "enables-layout-hud-on-space-change"
     case windowCountHUD = "enables-window-count-hud"
@@ -532,31 +533,31 @@ class UserConfiguration: NSObject {
     }
 
     func runningApplication(_ runningApplication: BundleIdentifiable, byDefaultFloatsForTitle title: String?) -> Reliable<DefaultFloat> {
-        let useIdentifiersAsBlacklist = floatingBundleIdentifiersIsBlacklist()
+        let useIdentifiersAsBlocklist = floatingBundleIdentifiersIsBlocklist()
 
         // If the application is in the floating list we need to continue to check title
         // Otherwise
-        //   - Blacklist means not floating
-        //   - Whitelist menas floating
+        //   - Blocklist means not floating
+        //   - Allowlist means floating
         guard let floatingBundle = runningApplicationFloatingBundle(runningApplication) else {
-            return .reliable(DefaultFloat.from(!useIdentifiersAsBlacklist))
+            return .reliable(DefaultFloat.from(!useIdentifiersAsBlocklist))
         }
 
         // If the window list is empty then all windows are included in the list
-        //   - Blacklist means floating
-        //   - Whitelist means not floating
+        //   - Blocklist means floating
+        //   - Allowlist means not floating
         if floatingBundle.windowTitles.isEmpty {
-            return .reliable(DefaultFloat.from(useIdentifiersAsBlacklist))
+            return .reliable(DefaultFloat.from(useIdentifiersAsBlocklist))
         }
 
         // If the title is `nil` then we cannot make a determination so we fall back to the default. However, we have to treat this value as unreliable as the window could have just been created and be in the process of loading.
         guard let title = title else {
-            return .unreliable(DefaultFloat.from(!useIdentifiersAsBlacklist))
+            return .unreliable(DefaultFloat.from(!useIdentifiersAsBlocklist))
         }
 
         // If the title matches it is included
-        //   - Blacklist means floating
-        //   - Whitelist means not floating
+        //   - Blocklist means floating
+        //   - Allowlist means not floating
         if floatingBundle.windowTitles.contains(where: { windowTitle in
             if title.range(of: windowTitle, options: .regularExpression) != nil {
                 return true
@@ -564,13 +565,13 @@ class UserConfiguration: NSObject {
                 return false
             }
         }) {
-            return .reliable(DefaultFloat.from(useIdentifiersAsBlacklist))
+            return .reliable(DefaultFloat.from(useIdentifiersAsBlocklist))
         }
 
         // Otherwise the window is not included
-        //   - Blacklist means not floating
-        //   - Whitelist means floating
-        let defaultFloat = DefaultFloat.from(!useIdentifiersAsBlacklist)
+        //   - Blocklist means not floating
+        //   - Allowlist means floating
+        let defaultFloat = DefaultFloat.from(!useIdentifiersAsBlocklist)
 
         // If the title is empty the window could have just been created and in the process of loading. Our float determination could still be correct, but to account for the potential change we mark it as unreliable.
         if title.isEmpty {
@@ -638,6 +639,10 @@ class UserConfiguration: NSObject {
         return storage.bool(forKey: .mouseResizesWindows)
     }
 
+    func enableSnapGuides() -> Bool {
+        return storage.bool(forKey: .enableSnapGuides)
+    }
+
     func enablesLayoutHUD() -> Bool {
         return storage.bool(forKey: .layoutHUD)
     }
@@ -668,9 +673,10 @@ class UserConfiguration: NSObject {
         }
         // if smartWindowMargins is enabled, enabled window margins if there are more than one visible windows on screen
         let options = CGWindowListOption(arrayLiteral: .excludeDesktopElements, .optionOnScreenOnly)
-        let windowsListInfo = CGWindowListCopyWindowInfo(options, CGWindowID(0))
-        let infoList = windowsListInfo as! [[String: Any]]
-        let visibleWindows = infoList.filter { $0["kCGWindowLayer"] as! Int == 0 }
+        guard let windowsListInfo = CGWindowListCopyWindowInfo(options, CGWindowID(0)) as? [[String: Any]] else {
+            return true
+        }
+        let visibleWindows = windowsListInfo.filter { ($0["kCGWindowLayer"] as? Int) == 0 }
         return visibleWindows.count > 1
     }
 
@@ -735,11 +741,11 @@ class UserConfiguration: NSObject {
         return CGFloat(storage.float(forKey: .screenPaddingRight))
     }
 
-    func floatingBundleIdentifiersIsBlacklist() -> Bool {
-        guard storage.object(forKey: .floatingBundleIdentifiersIsBlacklist) != nil else {
+    func floatingBundleIdentifiersIsBlocklist() -> Bool {
+        guard storage.object(forKey: .floatingBundleIdentifiersIsBlocklist) != nil else {
             return true
         }
-        return storage.bool(forKey: .floatingBundleIdentifiersIsBlacklist)
+        return storage.bool(forKey: .floatingBundleIdentifiersIsBlocklist)
     }
 
     func floatingBundles() -> [FloatingBundle] {

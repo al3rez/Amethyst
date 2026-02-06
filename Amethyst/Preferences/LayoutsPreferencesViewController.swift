@@ -52,7 +52,7 @@ class LayoutsPreferencesViewController: NSViewController, NSTableViewDataSource,
             modifierFlags: [],
             timestamp: 0,
             windowNumber: sender.window!.windowNumber,
-            context: sender.window!.graphicsContext,
+            context: NSGraphicsContext.current,
             eventNumber: 0,
             clickCount: 1,
             pressure: 1

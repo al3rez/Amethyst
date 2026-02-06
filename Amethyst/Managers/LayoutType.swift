@@ -59,6 +59,7 @@ enum LayoutType<Window: WindowType> {
     case widescreenTallLeft
     case widescreenTallRight
     case binarySpacePartitioning
+    case manual
 
     case custom(key: String)
 
@@ -80,7 +81,8 @@ enum LayoutType<Window: WindowType> {
             .floating,
             .widescreenTallLeft,
             .widescreenTallRight,
-            .binarySpacePartitioning
+            .binarySpacePartitioning,
+            .manual
         ]
     }
 
@@ -120,91 +122,65 @@ enum LayoutType<Window: WindowType> {
             return "widescreen-tall-right"
         case .binarySpacePartitioning:
             return "bsp"
+        case .manual:
+            return "manual"
         case .custom(let key):
             return key
         }
     }
 
+    private static var layoutClassByKey: [String: Layout<Window>.Type] {
+        return [
+            "tall": TallLayout<Window>.self,
+            "tall-right": TallRightLayout<Window>.self,
+            "wide": WideLayout<Window>.self,
+            "two-pane": TwoPaneLayout<Window>.self,
+            "two-pane-right": TwoPaneRightLayout<Window>.self,
+            "3column-left": ThreeColumnLeftLayout<Window>.self,
+            "middle-wide": ThreeColumnMiddleLayout<Window>.self,
+            "3column-right": ThreeColumnRightLayout<Window>.self,
+            "4column-left": FourColumnLeftLayout<Window>.self,
+            "4column-right": FourColumnRightLayout<Window>.self,
+            "fullscreen": FullscreenLayout<Window>.self,
+            "column": ColumnLayout<Window>.self,
+            "row": RowLayout<Window>.self,
+            "floating": FloatingLayout<Window>.self,
+            "widescreen-tall": WidescreenTallLayoutLeft<Window>.self,
+            "widescreen-tall-right": WidescreenTallLayoutRight<Window>.self,
+            "bsp": BinarySpacePartitioningLayout<Window>.self,
+            "manual": ManualLayout<Window>.self
+        ]
+    }
+
+    private static var typeByKey: [String: LayoutType<Window>] {
+        return [
+            "tall": .tall,
+            "tall-right": .tallRight,
+            "wide": .wide,
+            "two-pane": .twoPane,
+            "two-pane-right": .twoPaneRight,
+            "3column-left": .threeColumnLeft,
+            "middle-wide": .threeColumnMiddle,
+            "3column-right": .threeColumnRight,
+            "4column-left": .fourColumnLeft,
+            "4column-right": .fourColumnRight,
+            "fullscreen": .fullscreen,
+            "column": .column,
+            "row": .row,
+            "floating": .floating,
+            "widescreen-tall": .widescreenTallLeft,
+            "widescreen-tall-right": .widescreenTallRight,
+            "bsp": .binarySpacePartitioning,
+            "manual": .manual
+        ]
+    }
+
     var layoutClass: Layout<Window>.Type {
-        switch self {
-        case .tall:
-            return TallLayout<Window>.self
-        case .tallRight:
-            return TallRightLayout<Window>.self
-        case .wide:
-            return WideLayout<Window>.self
-        case .twoPane:
-            return TwoPaneLayout<Window>.self
-        case .twoPaneRight:
-            return TwoPaneRightLayout<Window>.self
-        case .threeColumnLeft:
-            return ThreeColumnLeftLayout<Window>.self
-        case .threeColumnMiddle:
-            return ThreeColumnMiddleLayout<Window>.self
-        case .threeColumnRight:
-            return ThreeColumnRightLayout<Window>.self
-        case .fourColumnLeft:
-            return FourColumnLeftLayout<Window>.self
-        case .fourColumnRight:
-            return FourColumnRightLayout<Window>.self
-        case .fullscreen:
-            return FullscreenLayout<Window>.self
-        case .column:
-            return ColumnLayout<Window>.self
-        case .row:
-            return RowLayout<Window>.self
-        case .floating:
-            return FloatingLayout<Window>.self
-        case .widescreenTallLeft:
-            return WidescreenTallLayoutLeft<Window>.self
-        case .widescreenTallRight:
-            return WidescreenTallLayoutRight<Window>.self
-        case .binarySpacePartitioning:
-            return BinarySpacePartitioningLayout<Window>.self
-        case .custom:
-            return CustomLayout<Window>.self
-        }
+        return LayoutType.layoutClassByKey[key] ?? CustomLayout<Window>.self
     }
 
     static func from(key: String) -> LayoutType<Window> {
-        switch key {
-        case "tall":
-            return .tall
-        case "tall-right":
-            return .tallRight
-        case "wide":
-            return .wide
-        case "two-pane":
-            return .twoPane
-        case "two-pane-right":
-            return .twoPaneRight
-        case "3column-left":
-            return .threeColumnLeft
-        case "middle-wide":
-            return .threeColumnMiddle
-        case "3column-right":
-            return .threeColumnRight
-        case "4column-left":
-            return .fourColumnLeft
-        case "4column-right":
-            return .fourColumnRight
-        case "fullscreen":
-            return .fullscreen
-        case "column":
-            return .column
-        case "row":
-            return .row
-        case "floating":
-            return .floating
-        case "widescreen-tall":
-            return .widescreenTallLeft
-        case "widescreen-tall-right":
-            return .widescreenTallRight
-        case "bsp":
-            return .binarySpacePartitioning
-        default:
-            return .custom(key: key)
-        }
+        return typeByKey[key] ?? .custom(key: key)
     }
 
     static func layoutForKey(_ layoutKey: String) -> Layout<Window>? {

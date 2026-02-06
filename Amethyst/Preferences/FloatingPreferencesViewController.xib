@@ -126,14 +126,14 @@
                 <box horizontalHuggingPriority="248" verticalHuggingPriority="750" boxType="separator" translatesAutoresizingMaskIntoConstraints="NO" id="2vs-LF-ePe">
                     <rect key="frame" x="174" y="336" width="200" height="5"/>
                 </box>
-                <popUpButton verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="9ag-lu-Zd7" userLabel="Blacklist Toggle">
+                <popUpButton verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="9ag-lu-Zd7" userLabel="Blocklist Toggle">
                     <rect key="frame" x="30" y="298" width="488" height="24"/>
                     <popUpButtonCell key="cell" type="push" title="Automatically float applications listed" bezelStyle="rounded" alignment="left" lineBreakMode="truncatingTail" borderStyle="borderAndBezel" imageScaling="proportionallyDown" inset="2" autoenablesItems="NO" altersStateOfSelectedItem="NO" selectedItem="dBv-SS-kCX" id="zLN-Ws-Prr">
                         <behavior key="behavior" lightByBackground="YES" lightByGray="YES"/>
                         <font key="font" metaFont="message"/>
                         <menu key="menu" autoenablesItems="NO" id="4pZ-9T-T6n">
                             <items>
-                                <menuItem title="Automatically float applications listed" id="dBv-SS-kCX" userLabel="Blacklist"/>
+                                <menuItem title="Automatically float applications listed" id="dBv-SS-kCX" userLabel="Blocklist"/>
                                 <menuItem title="Automatically float all applications except those listed" id="zy1-GY-HeS" userLabel="Whitelist">
                                     <modifierMask key="keyEquivalentModifierMask"/>
                                 </menuItem>
@@ -143,7 +143,7 @@
                     <connections>
                         <binding destination="N2H-cZ-f1m" name="selectedIndex" keyPath="values.floating-is-blacklist" id="Eho-vt-fZx">
                             <dictionary key="options">
-                                <string key="NSValueTransformerName">FloatingBlacklistIntBooleanTransformer</string>
+                                <string key="NSValueTransformerName">FloatingBlocklistIntBooleanTransformer</string>
                             </dictionary>
                         </binding>
                     </connections>

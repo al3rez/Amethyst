@@ -36,7 +36,7 @@ extension HotKeyManager: HotKeyRegistrar {
         }
 
         if let value = UserDefaults.standard.object(forKey: defaultsKey),
-           let shortcut = ValueTransformer(forName: .keyedUnarchiveFromDataTransformerName)?.transformedValue(value) as? MASShortcut {
+           let shortcut = ValueTransformer(forName: .secureUnarchiveFromDataTransformerName)?.transformedValue(value) as? MASShortcut {
             let shortcutKey = KeyboardShortcuts.Key(rawValue: shortcut.keyCode)
             let newShortcut = KeyboardShortcuts.Shortcut(shortcutKey, modifiers: shortcut.modifierFlags)
             // Keeping the old shortcuts in defaults for now to prevent data loss
