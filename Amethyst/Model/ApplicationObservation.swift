@@ -174,7 +174,7 @@ struct ApplicationObservation<Delegate: ApplicationObservationDelegate> {
                     return .error(error)
                 }
 
-                return .timer(.milliseconds((count ^ 2 * 100)), scheduler: MainScheduler.instance)
+                return .timer(.milliseconds(Int(pow(2.0, Double(count))) * 100), scheduler: MainScheduler.instance)
             }
         }
     }

@@ -11,8 +11,12 @@ import Cocoa
 
 class AppManager {
     public static func relaunch() {
-        let executablePath = Bundle.main.executablePath! as NSString
-        let fileSystemRepresentedPath = executablePath.fileSystemRepresentation
+        guard let executablePath = Bundle.main.executablePath else {
+            log.error("Failed to get executable path for relaunch")
+            return
+        }
+        let nsPath = executablePath as NSString
+        let fileSystemRepresentedPath = nsPath.fileSystemRepresentation
         let fileSystemPath = FileManager.default.string(withFileSystemRepresentation: fileSystemRepresentedPath, length: Int(strlen(fileSystemRepresentedPath)))
         Process.launchedProcess(launchPath: fileSystemPath, arguments: [])
         NSApp.terminate(self)

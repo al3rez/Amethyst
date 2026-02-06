@@ -34,8 +34,8 @@ struct DebugInfo {
     }
 
     static func version() -> String {
-        let version = Bundle.main.infoDictionary?["CFBundleVersion"] as! String
-        let shortVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as! String
+        let version = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown"
+        let shortVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
         return "\(shortVersion) (\(version))"
     }
 

@@ -10,6 +10,71 @@ import Foundation
 import Silica
 import SwiftyJSON
 
+/// Helper to check if CGS private APIs are available at runtime
+enum CGSPrivateAPIAvailability {
+    private static var _isAvailable: Bool?
+    private static var _spaceAPIsAvailable: Bool?
+    private static var _hasLoggedWarning: Bool = false
+
+    /// Returns true if CGS private APIs appear to be working on this system
+    static var isAvailable: Bool {
+        if let cached = _isAvailable {
+            return cached
+        }
+        // Test by checking if CGSMainConnectionID returns a valid connection
+        let connectionID = CGSMainConnectionID()
+        let available = connectionID != 0
+        _isAvailable = available
+        if !available && !_hasLoggedWarning {
+            _hasLoggedWarning = true
+            log.warning("CGS private APIs are not available on this system. Some features will be limited.")
+            log.warning("This may be due to macOS version incompatibility or security restrictions.")
+        }
+        return available
+    }
+
+    /// Returns true if space-related CGS APIs are working
+    static var spaceAPIsAvailable: Bool {
+        if let cached = _spaceAPIsAvailable {
+            return cached
+        }
+        guard isAvailable else {
+            _spaceAPIsAvailable = false
+            return false
+        }
+        // Test by trying to get managed display spaces
+        let available = CGSCopyManagedDisplaySpaces(CGSMainConnectionID()) != nil
+        _spaceAPIsAvailable = available
+        if !available {
+            log.warning("CGS space APIs are not available. Space-related features will be limited.")
+        }
+        return available
+    }
+
+    /// Resets the cached availability status (useful for testing or after system changes)
+    static func resetCache() {
+        _isAvailable = nil
+        _spaceAPIsAvailable = nil
+        _hasLoggedWarning = false
+    }
+
+    /// Returns a human-readable status of private API availability
+    static var statusDescription: String {
+        var status: [String] = []
+        if isAvailable {
+            status.append("Core CGS APIs: Available")
+        } else {
+            status.append("Core CGS APIs: Unavailable")
+        }
+        if spaceAPIsAvailable {
+            status.append("Space APIs: Available")
+        } else {
+            status.append("Space APIs: Unavailable")
+        }
+        return status.joined(separator: ", ")
+    }
+}
+
 /// Windows info as taken from the underlying system.
 struct CGWindowsInfo<Window: WindowType> {
     /// An array of dictionaries of window information
@@ -55,9 +120,14 @@ struct CGWindowsInfo<Window: WindowType> {
     }
 
     static func windowSpace(_ window: Window) -> Int? {
+        guard CGSPrivateAPIAvailability.isAvailable else {
+            log.debug("windowSpace: CGS APIs unavailable, returning nil")
+            return nil
+        }
         let windowIDsArray = CGWindowsInfo.windowIDsArray(window)
 
         guard let spaces = CGSCopySpacesForWindows(CGSMainConnectionID(), kCGSAllSpacesMask, windowIDsArray)?.takeRetainedValue() else {
+            log.debug("windowSpace: CGSCopySpacesForWindows returned nil for window \(window.cgID())")
             return nil
         }
 

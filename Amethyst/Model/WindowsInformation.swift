@@ -54,12 +54,12 @@ extension WindowsInformation {
             }
 
             // only consider windows with bounds
-            guard let windowFrameDictionary = windowDescription[kCGWindowBounds as String] as? [String: Any] else {
+            guard let windowFrameDictionary = windowDescription[kCGWindowBounds as String] as? [String: Any],
+                  let windowFrame = CGRect(dictionaryRepresentation: windowFrameDictionary as CFDictionary) else {
                 continue
             }
 
             // only consider window bounds that contain the given point
-            let windowFrame = CGRect(dictionaryRepresentation: windowFrameDictionary as CFDictionary)!
             guard windowFrame.contains(point) else {
                 continue
             }
@@ -122,7 +122,12 @@ extension WindowsInformation {
 
         for windowDescription in windowsAtPoint {
             if let window = windowInWindows(windows, withCGWindowDescription: windowDescription) {
-                if let ignored = ignoreWindow, window != ignored {
+                // Skip the ignored window if specified, otherwise return any window found
+                if let ignored = ignoreWindow {
+                    if window != ignored {
+                        return window
+                    }
+                } else {
                     return window
                 }
             }
@@ -142,11 +147,10 @@ extension WindowsInformation {
                 return false
             }
 
-            guard let boundsDictionary = windowDescription[kCGWindowBounds as String] as? [String: Any] else {
+            guard let boundsDictionary = windowDescription[kCGWindowBounds as String] as? [String: Any],
+                  let windowFrame = CGRect(dictionaryRepresentation: boundsDictionary as CFDictionary) else {
                 return false
             }
-
-            let windowFrame = CGRect(dictionaryRepresentation: boundsDictionary as CFDictionary)!
 
             guard windowFrame.equalTo($0.frame()) else {
                 return false

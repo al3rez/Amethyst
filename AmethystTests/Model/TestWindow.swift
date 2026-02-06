@@ -90,6 +90,10 @@ final class TestWindow: WindowType {
         return true
     }
 
+    func isValid() -> Bool {
+        return true
+    }
+
     func move(toSpace space: UInt) {
 
     }

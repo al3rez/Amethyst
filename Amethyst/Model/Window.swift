@@ -109,6 +109,9 @@ protocol WindowType: Equatable {
     /// Whether or not the window is currently on any screen.
     func isOnScreen() -> Bool
 
+    /// Whether or not the window is still valid (not destroyed).
+    func isValid() -> Bool
+
     /**
      Moves the window to a space.
      
@@ -276,6 +279,19 @@ extension AXWindow: WindowType {
         return false
     }
 
+    /// Checks if the window is still valid (has a valid cgID and is accessible)
+    func isValid() -> Bool {
+        // A window is invalid if its cgID is null
+        guard cgID() != kCGNullWindowID else {
+            return false
+        }
+        // Check if the owning process still exists
+        guard NSRunningApplication(processIdentifier: pid()) != nil else {
+            return false
+        }
+        return true
+    }
+
     func isFocused() -> Bool {
         guard let focused = AXWindow.currentlyFocused() else {
             return false
@@ -286,28 +302,65 @@ extension AXWindow: WindowType {
 
     /**
      Focuses the window.
-     
+
      This handles focusing and also moves the cursor to the window's frame if mouse-follows-focus is enabled.
-     
+
      - Returns:
      `true` if the window was successfully focused, `false` otherwise.
-     
+
      - Description:
-     What a mess. See: https://github.com/Hammerspoon/hammerspoon/issues/370#issuecomment-545545468
+     Uses NSRunningApplication.activate() as the primary focus method for better macOS compatibility,
+     falling back to private APIs when needed.
+     See: https://github.com/Hammerspoon/hammerspoon/issues/370#issuecomment-545545468
      */
     @discardableResult override func focus() -> Bool {
         let pid = self.pid()
+        let windowTitle = self.title() ?? "<unknown>"
+
+        // Verify window is still valid before attempting focus
+        guard cgID() != kCGNullWindowID else {
+            log.warning("Focus failed: window '\(windowTitle)' has invalid cgID (window may have been destroyed)")
+            return false
+        }
+
+        // Try NSRunningApplication.activate() as primary method for better macOS compatibility
+        if let runningApp = NSRunningApplication(processIdentifier: pid) {
+            let activated = runningApp.activate(options: [])
+            if activated {
+                // Raise the specific window within the app
+                if super.raise() {
+                    log.debug("Focus succeeded via NSRunningApplication for '\(windowTitle)'")
+                    return finishFocus()
+                } else {
+                    log.debug("NSRunningApplication activated but raise failed for '\(windowTitle)', trying private APIs")
+                }
+            } else {
+                log.debug("NSRunningApplication.activate() failed for '\(windowTitle)' (pid: \(pid)), trying private APIs")
+            }
+        } else {
+            log.warning("Could not find running application for pid \(pid), window '\(windowTitle)'")
+        }
+
+        // Fallback to private APIs if NSRunningApplication activation fails
+        return focusWithPrivateAPIs()
+    }
+
+    private func focusWithPrivateAPIs() -> Bool {
+        let pid = self.pid()
+        let windowTitle = self.title() ?? "<unknown>"
         var wid = self.cgID()
         var psn = ProcessSerialNumber()
         let status = GetProcessForPID(pid, &psn)
 
         guard status == noErr else {
+            log.warning("Focus failed: GetProcessForPID returned \(status) for '\(windowTitle)' (pid: \(pid))")
             return false
         }
 
         var cgStatus = _SLPSSetFrontProcessWithOptions(&psn, wid, kCPSUserGenerated)
 
         guard cgStatus == .success else {
+            log.warning("Focus failed: _SLPSSetFrontProcessWithOptions returned \(cgStatus.rawValue) for '\(windowTitle)'")
             return false
         }
 
@@ -322,14 +375,21 @@ extension AXWindow: WindowType {
                 return SLPSPostEventRecordTo(&psn, &pointer.baseAddress!.pointee)
             }
             guard cgStatus == .success else {
+                log.warning("Focus failed: SLPSPostEventRecordTo returned \(cgStatus.rawValue) for '\(windowTitle)'")
                 return false
             }
         }
 
         guard super.raise() else {
+            log.warning("Focus failed: raise() returned false for '\(windowTitle)'")
             return false
         }
 
+        log.debug("Focus succeeded via private APIs for '\(windowTitle)'")
+        return finishFocus()
+    }
+
+    private func finishFocus() -> Bool {
         guard UserConfiguration.shared.mouseFollowsFocus() else {
             return true
         }
@@ -375,5 +435,17 @@ extension AXWindow: WindowType {
     }
 
     func move(toSpace spaceID: CGSSpaceID) {
+        guard CGSPrivateAPIAvailability.isAvailable else {
+            log.warning("Cannot move window to space: CGS private APIs unavailable")
+            return
+        }
+        let windowID = cgID()
+        guard windowID != kCGNullWindowID else {
+            log.warning("Cannot move window to space: window has invalid cgID")
+            return
+        }
+        let windowIDArray = [NSNumber(value: windowID)] as CFArray
+        CGSMoveWindowsToManagedSpace(CGSMainConnectionID(), windowIDArray, spaceID)
+        log.debug("Moved window '\(title() ?? "<unknown>")' to space \(spaceID)")
     }
 }
