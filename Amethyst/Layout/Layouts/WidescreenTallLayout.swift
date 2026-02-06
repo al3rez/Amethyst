@@ -53,20 +53,25 @@ class WidescreenTallLayout<Window: WindowType>: Layout<Window> {
         let mainPaneWindowHeight = screenFrame.height
         let secondaryPaneWindowHeight = hasSecondaryPane ? round(screenFrame.height / CGFloat(secondaryPaneCount)) : 0.0
 
-        let mainPaneWidth = round(screenFrame.size.width * (hasSecondaryPane ? CGFloat(mainPaneRatio) : 1.0))
+        let effectiveRatio = clampedMainPaneRatio(hasSecondaryPane: hasSecondaryPane)
+        let mainPaneWidth = round(screenFrame.size.width * (hasSecondaryPane ? CGFloat(effectiveRatio) : 1.0))
         let mainPaneWindowWidth = round(mainPaneWidth / CGFloat(mainPaneCount))
         let secondaryPaneWindowWidth = screenFrame.width - mainPaneWidth
+        let safeMainPaneWindowWidth = max(mainPaneWindowWidth, 1)
+        let safeSecondaryPaneWindowWidth = max(secondaryPaneWindowWidth, 1)
 
-        return windows.reduce([]) { frameAssignments, window -> [FrameAssignmentOperation<Window>] in
-            var assignments = frameAssignments
+        var assignments: [FrameAssignmentOperation<Window>] = []
+        assignments.reserveCapacity(windows.count)
+
+        for (index, window) in windows.enumerated() {
             var windowFrame = CGRect.zero
-            let windowIndex = frameAssignments.count
-            let isMain = windowIndex < mainPaneCount
+            let isMain = index < mainPaneCount
+            let secondaryIndex = index - mainPaneCount
             let scaleFactor: CGFloat
 
             if isMain {
-                scaleFactor = CGFloat(screenFrame.size.width / mainPaneWindowWidth) / CGFloat(mainPaneCount)
-                windowFrame.origin.x = screenFrame.origin.x + mainPaneWindowWidth * CGFloat(windowIndex)
+                scaleFactor = CGFloat(screenFrame.size.width / safeMainPaneWindowWidth) / CGFloat(mainPaneCount)
+                windowFrame.origin.x = screenFrame.origin.x + mainPaneWindowWidth * CGFloat(index)
                 if type(of: self).isRight {
                     windowFrame.origin.x += secondaryPaneWindowWidth
                 }
@@ -74,9 +79,9 @@ class WidescreenTallLayout<Window: WindowType>: Layout<Window> {
                 windowFrame.size.width = mainPaneWindowWidth
                 windowFrame.size.height = mainPaneWindowHeight
             } else {
-                scaleFactor = CGFloat(screenFrame.size.width / secondaryPaneWindowWidth)
+                scaleFactor = CGFloat(screenFrame.size.width / safeSecondaryPaneWindowWidth)
                 windowFrame.origin.x = screenFrame.origin.x + mainPaneWidth
-                windowFrame.origin.y = screenFrame.origin.y + (secondaryPaneWindowHeight * CGFloat(windowIndex - mainPaneCount))
+                windowFrame.origin.y = screenFrame.origin.y + (secondaryPaneWindowHeight * CGFloat(secondaryIndex))
                 windowFrame.size.width = secondaryPaneWindowWidth
                 windowFrame.size.height = secondaryPaneWindowHeight
                 if type(of: self).isRight {
@@ -93,9 +98,9 @@ class WidescreenTallLayout<Window: WindowType>: Layout<Window> {
             )
 
             assignments.append(FrameAssignmentOperation(frameAssignment: frameAssignment, windowSet: windowSet))
-
-            return assignments
         }
+
+        return assignments
     }
 }
 

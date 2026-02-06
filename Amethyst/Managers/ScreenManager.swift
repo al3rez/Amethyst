@@ -43,6 +43,9 @@ final class ScreenManager<Delegate: ScreenManagerDelegate>: NSObject, Codable {
         target: nil
     )
     private let reflowOperationQueue = OperationQueue()
+    private var lastAssignedFrames: [Window.WindowID: CGRect] = [:]
+    private var pendingReflowWorkItem: DispatchWorkItem?
+    private var pendingReflowChange: Change<Window>?
 
     private var layouts: [Layout<Window>] = []
     private var currentLayoutIndexBySpaceUUID: [String: Int] = [:]
@@ -147,6 +150,7 @@ final class ScreenManager<Delegate: ScreenManagerDelegate>: NSObject, Codable {
         }
 
         self.space = space
+        lastAssignedFrames.removeAll()
 
         setCurrentLayoutIndex(currentLayoutIndexBySpaceUUID[space.uuid] ?? 0, changingSpace: true)
 
@@ -162,12 +166,14 @@ final class ScreenManager<Delegate: ScreenManagerDelegate>: NSObject, Codable {
         switch windowChange {
         case let .add(window: window):
             lastFocusedWindow = window
+            lastAssignedFrames.removeValue(forKey: window.id())
         case let .focusChanged(window):
             lastFocusedWindow = window
         case let .remove(window):
             if lastFocusedWindow == window {
                 lastFocusedWindow = nil
             }
+            lastAssignedFrames.removeValue(forKey: window.id())
         case .windowSwap, .applicationActivate, .applicationDeactivate, .spaceChange, .layoutChange, .tabChange, .none, .unknown:
             break
         }
@@ -180,9 +186,75 @@ final class ScreenManager<Delegate: ScreenManagerDelegate>: NSObject, Codable {
             statefulLayout.updateWithChange(windowChange)
         }
 
-        DispatchQueue.main.async {
+        pendingReflowChange = coalescedChange(existing: pendingReflowChange, incoming: windowChange)
+        pendingReflowWorkItem?.cancel()
+
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            let change = self.pendingReflowChange ?? windowChange
+            self.pendingReflowChange = nil
+            self.pendingReflowWorkItem = nil
             self.minimizeWindows()
-            self.reflow(windowChange)
+            self.reflow(change)
+        }
+
+        pendingReflowWorkItem = workItem
+        let delay = reflowDelay(for: pendingReflowChange ?? windowChange)
+        if delay > 0 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+        } else {
+            DispatchQueue.main.async(execute: workItem)
+        }
+    }
+
+    private func reflowDelay(for change: Change<Window>) -> TimeInterval {
+        switch change {
+        case .unknown, .focusChanged:
+            return 0.02
+        default:
+            return 0
+        }
+    }
+
+    private func coalescedChange(existing: Change<Window>?, incoming: Change<Window>) -> Change<Window> {
+        guard let existing = existing else { return incoming }
+
+        // Always keep the most significant structural changes.
+        if case .spaceChange = existing { return existing }
+        if case .spaceChange = incoming { return incoming }
+
+        if case .layoutChange = existing { return existing }
+        if case .layoutChange = incoming { return incoming }
+
+        // Preserve window swaps so focus can be restored correctly.
+        if case .windowSwap = incoming { return incoming }
+        if case .windowSwap = existing { return existing }
+
+        // Prefer adds/removes over focus or app activation changes.
+        switch incoming {
+        case .add, .remove:
+            return incoming
+        default:
+            break
+        }
+
+        switch existing {
+        case .add, .remove:
+            return existing
+        default:
+            break
+        }
+
+        // Otherwise, keep the most recent meaningful change.
+        switch incoming {
+        case .focusChanged, .tabChange, .applicationActivate, .applicationDeactivate:
+            return incoming
+        case .none:
+            return existing
+        case .unknown:
+            return existing
+        case .spaceChange, .layoutChange, .windowSwap, .add, .remove:
+            return incoming
         }
     }
 
@@ -234,7 +306,37 @@ final class ScreenManager<Delegate: ScreenManagerDelegate>: NSObject, Codable {
             return
         }
 
-        guard let layout = currentLayout, let frameAssignments = layout.frameAssignments(windows, on: screen) else {
+        guard let layout = currentLayout, let frameAssignmentOps = layout.frameAssignments(windows, on: screen) else {
+            return
+        }
+
+        // Drop assignments that would not move or resize a window.
+        let filteredFrameAssignmentOps = frameAssignmentOps.filter { op in
+            let windowID = op.frameAssignment.window.id
+            let nextFrame = op.frameAssignment.finalFrame
+
+            if let window = windows.window(withID: windowID) {
+                let currentFrame = window.frame()
+                let deltaThreshold: CGFloat = 1.0
+                let isSameFrame =
+                    abs(currentFrame.origin.x - nextFrame.origin.x) <= deltaThreshold &&
+                    abs(currentFrame.origin.y - nextFrame.origin.y) <= deltaThreshold &&
+                    abs(currentFrame.size.width - nextFrame.size.width) <= deltaThreshold &&
+                    abs(currentFrame.size.height - nextFrame.size.height) <= deltaThreshold
+                if !isSameFrame {
+                    lastAssignedFrames[windowID] = nextFrame
+                    return true
+                }
+            }
+
+            if let previousFrame = lastAssignedFrames[windowID], previousFrame.equalTo(nextFrame) {
+                return false
+            }
+            lastAssignedFrames[windowID] = nextFrame
+            return true
+        }
+
+        if filteredFrameAssignmentOps.isEmpty {
             return
         }
 
@@ -243,8 +345,8 @@ final class ScreenManager<Delegate: ScreenManagerDelegate>: NSObject, Codable {
         let completeOperation = BlockOperation()
 
         // The complete operation should execute the completion delegate call
-        completeOperation.addExecutionBlock { [unowned completeOperation, weak self] in
-            if completeOperation.isCancelled {
+        completeOperation.addExecutionBlock { [weak completeOperation, weak self] in
+            guard let completeOperation = completeOperation, !completeOperation.isCancelled else {
                 return
             }
 
@@ -259,13 +361,25 @@ final class ScreenManager<Delegate: ScreenManagerDelegate>: NSObject, Codable {
             }
         }
 
-        // The completion should be dependent on all assignments finishing
-        frameAssignments.forEach { completeOperation.addDependency($0) }
+        // Use batched operation for 3+ windows to reduce main thread context switches
+        // For 1-2 windows, individual operations have minimal overhead
+        if filteredFrameAssignmentOps.count >= 3 {
+            // Extract frame assignments and batch them into a single operation
+            let assignments = filteredFrameAssignmentOps.map { $0.frameAssignment }
+            let batchedOp = BatchedFrameAssignmentOperation(frameAssignments: assignments, windowSet: windows)
+            completeOperation.addDependency(batchedOp)
 
-        // Start the operation
-        delegate?.onReflowInitiation()
-        reflowOperationQueue.addOperations(frameAssignments, waitUntilFinished: false)
-        reflowOperationQueue.addOperation(completeOperation)
+            delegate?.onReflowInitiation()
+            reflowOperationQueue.addOperation(batchedOp)
+            reflowOperationQueue.addOperation(completeOperation)
+        } else {
+            // For small window counts, use individual operations
+            filteredFrameAssignmentOps.forEach { completeOperation.addDependency($0) }
+
+            delegate?.onReflowInitiation()
+            reflowOperationQueue.addOperations(filteredFrameAssignmentOps, waitUntilFinished: false)
+            reflowOperationQueue.addOperation(completeOperation)
+        }
     }
 
     func updateCurrentLayout(_ updater: (Layout<Window>) -> Void) {
@@ -360,7 +474,14 @@ final class ScreenManager<Delegate: ScreenManagerDelegate>: NSObject, Codable {
     }
 
     @objc func hideLayoutHUD(_ sender: AnyObject) {
-        layoutNameWindowController.close()
+        guard let layoutNameWindow = layoutNameWindowController.window as? LayoutNameWindow else {
+            layoutNameWindowController.close()
+            return
+        }
+
+        layoutNameWindow.animateOut { [weak self] in
+            self?.layoutNameWindowController.close()
+        }
     }
 
     func displayCustomHUD(title: String, description: String = "") {
@@ -394,6 +515,7 @@ final class ScreenManager<Delegate: ScreenManagerDelegate>: NSObject, Codable {
         layoutNameWindow.setFrameOrigin(NSPointFromCGPoint(windowOrigin))
 
         layoutNameWindowController.showWindow(self)
+        layoutNameWindow.animateIn()
     }
 }
 

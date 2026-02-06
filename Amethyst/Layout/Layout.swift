@@ -103,6 +103,23 @@ extension Layout {
     }
 
     /**
+     Determines what frame assignment the layout would put at a given point.
+
+     - Parameters:
+         - point: The point to test for location.
+         - windows: The windows to apply the layout algorithm to.
+         - screen: The screen on which those windows should reside.
+
+     - Returns:
+     The `FrameAssignment` for the window that the layout would intend to put at `point`, including the layout's intended frame.
+     */
+    func frameAssignmentAtPoint(_ point: CGPoint, of windowSet: WindowSet<Window>, on screen: Screen) -> FrameAssignment<Window>? {
+        return frameAssignments(windowSet, on: screen)?
+            .map { $0.frameAssignment }
+            .first { $0.frame.contains(point) }
+    }
+
+    /**
      Determines what frame the layout would apply to a given window.
      
      - Parameters:
@@ -186,6 +203,15 @@ extension PanedLayout {
             return recommendMainPaneRawRatio(rawRatio: max(min(ratio, 1), 0))
         }
         recommendMainPaneRawRatio(rawRatio: ratio)
+    }
+
+    /// Clamp main pane ratio to avoid zero-width/height panes when a secondary pane exists.
+    func clampedMainPaneRatio(hasSecondaryPane: Bool, minimumRatio: CGFloat = 0.05) -> CGFloat {
+        guard hasSecondaryPane else {
+            return 1.0
+        }
+        let minRatio = min(max(minimumRatio, 0.0), 0.45)
+        return min(max(mainPaneRatio, minRatio), 1.0 - minRatio)
     }
 
     /// The default behavior of main pane expansion that simply recommends an increase in ratio by the configured resize step.

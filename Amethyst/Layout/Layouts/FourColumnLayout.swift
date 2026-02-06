@@ -236,9 +236,12 @@ class FourColumnLayout<Window: WindowType>: Layout<Window> {
 
             let scaleFactor: CGFloat = screenFrame.width / {
                 if pane == .main {
-                    return paneArrangement.width(.main)
+                    return max(paneArrangement.width(.main), 1)
                 }
-                return paneArrangement.width(.secondary) + paneArrangement.width(.tertiary) + paneArrangement.width(.quaternary)
+                return max(
+                    paneArrangement.width(.secondary) + paneArrangement.width(.tertiary) + paneArrangement.width(.quaternary),
+                    1
+                )
             }()
 
             windowFrame.origin.x = xorigin

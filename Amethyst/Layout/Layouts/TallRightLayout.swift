@@ -61,29 +61,35 @@ class TallRightLayout<Window: WindowType>: Layout<Window>, PanedLayout {
         let hasSecondaryPane = secondaryPaneCount > 0
 
         let screenFrame = screen.adjustedFrame()
+        let effectiveRatio = clampedMainPaneRatio(hasSecondaryPane: hasSecondaryPane)
 
         let mainPaneWindowHeight = round(screenFrame.size.height / CGFloat(mainPaneCount))
         let secondaryPaneWindowHeight = hasSecondaryPane ? round(screenFrame.size.height / CGFloat(secondaryPaneCount)) : 0.0
 
-        let secondaryPaneWindowWidth = round(screenFrame.size.width * (hasSecondaryPane ? CGFloat(1.0 - mainPaneRatio) : 0))
+        let secondaryPaneWindowWidth = round(screenFrame.size.width * (hasSecondaryPane ? CGFloat(1.0 - effectiveRatio) : 0))
         let mainPaneWindowWidth = screenFrame.size.width - secondaryPaneWindowWidth
+        let safeMainPaneWindowWidth = max(mainPaneWindowWidth, 1)
+        let safeSecondaryPaneWindowWidth = max(secondaryPaneWindowWidth, 1)
 
-        return windows.reduce([]) { frameAssignments, window -> [FrameAssignmentOperation<Window>] in
-            var assignments = frameAssignments
+        var assignments: [FrameAssignmentOperation<Window>] = []
+        assignments.reserveCapacity(windows.count)
+
+        for (index, window) in windows.enumerated() {
             var windowFrame = CGRect.zero
-            let isMain = frameAssignments.count < mainPaneCount
-            var scaleFactor: CGFloat
+            let isMain = index < mainPaneCount
+            let secondaryIndex = index - mainPaneCount
+            let scaleFactor: CGFloat
 
             if isMain {
-                scaleFactor = screenFrame.size.width / mainPaneWindowWidth
+                scaleFactor = screenFrame.size.width / safeMainPaneWindowWidth
                 windowFrame.origin.x = screenFrame.origin.x + secondaryPaneWindowWidth
-                windowFrame.origin.y = screenFrame.origin.y + (mainPaneWindowHeight * CGFloat(frameAssignments.count))
+                windowFrame.origin.y = screenFrame.origin.y + (mainPaneWindowHeight * CGFloat(index))
                 windowFrame.size.width = mainPaneWindowWidth
                 windowFrame.size.height = mainPaneWindowHeight
             } else {
-                scaleFactor = screenFrame.size.width / secondaryPaneWindowWidth
+                scaleFactor = screenFrame.size.width / safeSecondaryPaneWindowWidth
                 windowFrame.origin.x = screenFrame.origin.x
-                windowFrame.origin.y = screenFrame.origin.y + secondaryPaneWindowHeight * CGFloat(windows.count - (frameAssignments.count + 1))
+                windowFrame.origin.y = screenFrame.origin.y + (secondaryPaneWindowHeight * CGFloat(secondaryIndex))
                 windowFrame.size.width = secondaryPaneWindowWidth
                 windowFrame.size.height = secondaryPaneWindowHeight
             }
@@ -97,8 +103,8 @@ class TallRightLayout<Window: WindowType>: Layout<Window>, PanedLayout {
             )
 
             assignments.append(FrameAssignmentOperation(frameAssignment: frameAssignment, windowSet: windowSet))
-
-            return assignments
         }
+
+        return assignments
     }
 }

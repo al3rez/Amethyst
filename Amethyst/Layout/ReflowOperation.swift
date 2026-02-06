@@ -9,6 +9,51 @@
 import Foundation
 import Silica
 
+/// Apply window margins, minimum sizes, and screen clamping to a frame.
+func applyWindowAdjustments(to frame: CGRect, screenFrame: CGRect, disableWindowMargins: Bool) -> CGRect {
+    var ret = frame
+    let padding = floor(UserConfiguration.shared.windowMarginSize() / 2)
+
+    if UserConfiguration.shared.windowMargins() && !disableWindowMargins {
+        ret.origin.x += padding
+        ret.origin.y += padding
+        ret.size.width -= 2 * padding
+        ret.size.height -= 2 * padding
+    }
+
+    let windowMinimumWidth = UserConfiguration.shared.windowMinimumWidth()
+    let windowMinimumHeight = UserConfiguration.shared.windowMinimumHeight()
+
+    if windowMinimumWidth > ret.size.width {
+        ret.origin.x -= ((windowMinimumWidth - ret.size.width) / 2)
+        ret.size.width = windowMinimumWidth
+    }
+
+    if windowMinimumHeight > ret.size.height {
+        ret.origin.y -= ((windowMinimumHeight - ret.size.height) / 2)
+        ret.size.height = windowMinimumHeight
+    }
+
+    // Clamp to the screen frame to avoid drifting outside visible bounds.
+    let minX = screenFrame.origin.x
+    let maxX = screenFrame.maxX - ret.size.width
+    if maxX < minX {
+        ret.origin.x = minX
+    } else {
+        ret.origin.x = min(max(ret.origin.x, minX), maxX)
+    }
+
+    let minY = screenFrame.origin.y
+    let maxY = screenFrame.maxY - ret.size.height
+    if maxY < minY {
+        ret.origin.y = minY
+    } else {
+        ret.origin.y = min(max(ret.origin.y, minY), maxY)
+    }
+
+    return ret
+}
+
 /// Possible dimensions without constraints.
 enum UnconstrainedDimension: Int {
     /// The dimension along the x-axis.
@@ -100,9 +145,14 @@ struct WindowSet<Window: WindowType> {
 
         frameAssignment.perform(withWindow: window)
     }
+
+    /// Get a window by ID for batched operations
+    func window(withID id: Window.WindowID) -> Window? {
+        return windowForID(id)
+    }
 }
 
-class FrameAssignmentOperation<Window: WindowType>: Operation {
+class FrameAssignmentOperation<Window: WindowType>: Operation, @unchecked Sendable {
     let frameAssignment: FrameAssignment<Window>
     let windowSet: WindowSet<Window>
 
@@ -118,6 +168,38 @@ class FrameAssignmentOperation<Window: WindowType>: Operation {
         }
 
         windowSet.perform(frameAssignment: frameAssignment)
+    }
+}
+
+/// Batched operation that applies multiple frame assignments in a single main thread call
+/// This reduces context switching overhead when reflowing many windows
+class BatchedFrameAssignmentOperation<Window: WindowType>: Operation, @unchecked Sendable {
+    let frameAssignments: [FrameAssignment<Window>]
+    let windowSet: WindowSet<Window>
+
+    init(frameAssignments: [FrameAssignment<Window>], windowSet: WindowSet<Window>) {
+        self.frameAssignments = frameAssignments
+        self.windowSet = windowSet
+        super.init()
+    }
+
+    override func main() {
+        guard !isCancelled else {
+            return
+        }
+
+        // Batch all frame assignments in a single main thread call
+        DispatchQueue.main.sync {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            for frameAssignment in self.frameAssignments {
+                guard !self.isCancelled else { return }
+                if let window = self.windowSet.window(withID: frameAssignment.window.id) {
+                    frameAssignment.performBatched(withWindow: window)
+                }
+            }
+            CATransaction.commit()
+        }
     }
 }
 
@@ -156,30 +238,11 @@ struct FrameAssignment<Window: WindowType> {
 
     /// The final frame is the desired frame, but transformed to provide desired padding
     var finalFrame: CGRect {
-        var ret = frame
-        let padding = floor(UserConfiguration.shared.windowMarginSize() / 2)
-
-        if UserConfiguration.shared.windowMargins() && !disableWindowMargins {
-            ret.origin.x += padding
-            ret.origin.y += padding
-            ret.size.width -= 2 * padding
-            ret.size.height -= 2 * padding
-        }
-
-        let windowMinimumWidth = UserConfiguration.shared.windowMinimumWidth()
-        let windowMinimumHeight = UserConfiguration.shared.windowMinimumHeight()
-
-        if windowMinimumWidth > ret.size.width {
-            ret.origin.x -= ((windowMinimumWidth - ret.size.width) / 2)
-            ret.size.width = windowMinimumWidth
-        }
-
-        if windowMinimumHeight > ret.size.height {
-            ret.origin.y -= ((windowMinimumHeight - ret.size.height) / 2)
-            ret.size.height = windowMinimumHeight
-        }
-
-        return ret
+        return applyWindowAdjustments(
+            to: frame,
+            screenFrame: screenFrame,
+            disableWindowMargins: disableWindowMargins
+        )
     }
 
     /**
@@ -195,39 +258,50 @@ struct FrameAssignment<Window: WindowType> {
      */
     func impliedMainPaneRatio(windowFrame: CGRect) -> CGFloat {
         let oldDimension = resizeRules.scaledDimension(frame, negatePadding: false)
-        let newDimension = resizeRules.scaledDimension(windowFrame, negatePadding: true)
-        let implied =  (newDimension / oldDimension) / resizeRules.scaleFactor
+        guard oldDimension > 0, resizeRules.scaleFactor > 0 else {
+            return resizeRules.isMain ? 1.0 : 0.0
+        }
+        let newDimension = max(resizeRules.scaledDimension(windowFrame, negatePadding: true), 0.0)
+        let implied = (newDimension / oldDimension) / resizeRules.scaleFactor
         return resizeRules.isMain ? implied : 1 - implied
     }
 
     /// Perform the actual application of the frame to the window
     func perform(withWindow window: Window) {
-        var finalFrame = self.finalFrame
-        var finalOrigin = finalFrame.origin
-
-        // If this is the focused window then we need to shift it to be on screen regardless of size
-        // We call this "window peeking" (this line here to aid in text search)
-        if window.isFocused() {
-            // Just resize the window first to see what the dimensions end up being
-            // Sometimes applications have internal window requirements that are not exposed to us directly
-            finalFrame.origin = window.frame().origin
-            DispatchQueue.main.sync {
-                window.setFrame(finalFrame, withThreshold: CGSize(width: 1, height: 1))
-            }
-
-            // With the real height we can update the frame to account for the current size
-            finalFrame.size = CGSize(
-                width: max(window.frame().width, finalFrame.width),
-                height: max(window.frame().height, finalFrame.height)
-            )
-            finalOrigin.x = max(screenFrame.minX, min(finalOrigin.x, screenFrame.maxX - finalFrame.size.width))
-            finalOrigin.y = max(screenFrame.minY, min(finalOrigin.y, screenFrame.maxY - finalFrame.size.height))
-        }
-
-        // Move the window to its final frame
-        finalFrame.origin = finalOrigin
+        // All window operations must happen on main thread - do everything in one sync block
         DispatchQueue.main.sync {
-            window.setFrame(finalFrame, withThreshold: CGSize(width: 1, height: 1))
+            performOnMainThread(withWindow: window)
         }
+    }
+
+    /// Perform frame assignment without dispatching (for batched operations already on main thread)
+    func performBatched(withWindow window: Window) {
+        performOnMainThread(withWindow: window)
+    }
+
+    /// Core implementation that must be called from main thread
+    private func performOnMainThread(withWindow window: Window) {
+        let finalFrame = self.finalFrame
+        let currentFrame = window.frame()
+
+        // Skip if the frame is already effectively applied to avoid extra AX traffic.
+        let deltaThreshold: CGFloat = 1.0
+        let isSameFrame =
+            abs(currentFrame.origin.x - finalFrame.origin.x) <= deltaThreshold &&
+            abs(currentFrame.origin.y - finalFrame.origin.y) <= deltaThreshold &&
+            abs(currentFrame.size.width - finalFrame.size.width) <= deltaThreshold &&
+            abs(currentFrame.size.height - finalFrame.size.height) <= deltaThreshold
+
+        guard !isSameFrame else {
+            return
+        }
+
+        // Simply apply the assigned frame - don't expand focused windows
+        // The "window peeking" behavior was causing focused windows to grow
+        // and overlap with adjacent tiles when apps have minimum size constraints
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        window.setFrame(finalFrame, withThreshold: CGSize(width: 1, height: 1))
+        CATransaction.commit()
     }
 }

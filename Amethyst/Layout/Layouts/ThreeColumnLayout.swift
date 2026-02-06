@@ -79,7 +79,8 @@ struct TriplePaneArrangement {
 
         // calculate widths
         let screenWidth = screenSize.width
-        let mainWindowWidth = secondaryPaneCount == 0 ? screenWidth : round(screenWidth * mainPaneRatio)
+        let effectiveRatio: CGFloat = secondaryPaneCount == 0 ? 1.0 : min(max(mainPaneRatio, 0.05), 0.95)
+        let mainWindowWidth = secondaryPaneCount == 0 ? screenWidth : round(screenWidth * effectiveRatio)
         let nonMainWindowWidth = round((screenWidth - mainWindowWidth) / 2)
         self.paneWindowWidth = [
             .main: mainWindowWidth,
@@ -211,9 +212,9 @@ class ThreeColumnLayout<Window: WindowType>: Layout<Window> {
 
             let scaleFactor: CGFloat = screenFrame.width / {
                 if pane == .main {
-                    return paneArrangement.width(.main)
+                    return max(paneArrangement.width(.main), 1)
                 }
-                return paneArrangement.width(.secondary) + paneArrangement.width(.tertiary)
+                return max(paneArrangement.width(.secondary) + paneArrangement.width(.tertiary), 1)
             }()
 
             windowFrame.origin.x = xorigin
